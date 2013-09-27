@@ -4,7 +4,7 @@ CC=g++
 # Hey!, I am comment number 2. I want to say that CFLAGS will be the
 # options I'll pass to the compiler.
 CFLAGS=-c -Wall
-LDFLAGS=-I/Users/rappoccio/install_boost/boost_1_54_0/ -lboost_thread -lboost_system
+LDFLAGS=-I$(INCLUDEPATH) -L$(LD_LIBRARY_PATH) -lboost_thread -lboost_system
 
 all: thread_test test_boost locking_pseudocode
 
