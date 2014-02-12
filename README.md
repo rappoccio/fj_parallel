@@ -1,5 +1,5 @@
 git clone https://github.com/rappoccio/fj_parallel.git
-cd fj_parallel/fj_parallel_test
+cd fj_parallel/fastjet_3.0.4
 ./configure --prefix=$PWD/../fastjet_3.0.4_install
 make
 make install
