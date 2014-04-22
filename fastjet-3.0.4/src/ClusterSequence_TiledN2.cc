@@ -1,5 +1,5 @@
 //STARTHEADER
-// $Id: ClusterSequence_TiledN2.cc 2696 2011-11-15 09:42:59Z soyez $
+// $Id: ClusterSequence_TiledN2.cc 3213 2013-09-16 06:59:06Z soyez $
 //
 // Copyright (c) 2005-2011, Matteo Cacciari, Gavin P. Salam and Gregory Soyez
 //
@@ -38,6 +38,7 @@
 #include "fastjet/PseudoJet.hh"
 #include "fastjet/ClusterSequence.hh"
 #include "fastjet/internal/MinHeap.hh"
+#include "../include/fastjet/concurrency/TiledN2.hh"
 
 FASTJET_BEGIN_NAMESPACE      // defined in fastjet/internal/base.hh
 
@@ -46,7 +47,7 @@ using namespace std;
 
 //----------------------------------------------------------------------
 void ClusterSequence::_bj_remove_from_tiles(TiledJet * const jet) {
-  Tile * tile = & _tiles[jet->tile_index];
+  Tile * tile = & (*_tiles)[jet->tile_index];
 
   if (jet->previous == NULL) {
     // we are at head of the tile, so reset it.
@@ -82,7 +83,10 @@ void ClusterSequence::_bj_remove_from_tiles(TiledJet * const jet) {
 /// region.
 ///
 void ClusterSequence::_initialise_tiles() {
-
+  
+  // assigns _tiles to point at the memory location 
+  // contained in concurrency/TiledN2.cc
+  _tiles = & _ptiles ;
   // first decide tile sizes (with a lower bound to avoid huge memory use with
   // very small R)
   double default_size = max(0.1,_Rparam);
@@ -117,12 +121,12 @@ void ClusterSequence::_initialise_tiles() {
   _tiles_eta_max = _tiles_ieta_max * _tile_size_eta;
 
   // allocate the tiles
-  _tiles.resize((_tiles_ieta_max-_tiles_ieta_min+1)*_n_tiles_phi);
+  (*_tiles).resize((_tiles_ieta_max-_tiles_ieta_min+1)*_n_tiles_phi);
 
   // now set up the cross-referencing between tiles
   for (int ieta = _tiles_ieta_min; ieta <= _tiles_ieta_max; ieta++) {
     for (int iphi = 0; iphi < _n_tiles_phi; iphi++) {
-      Tile * tile = & _tiles[_tile_index(ieta,iphi)];
+      Tile * tile = & (*_tiles)[_tile_index(ieta,iphi)];
       // no jets in this tile yet
       tile->head = NULL; // first element of tiles points to itself
       tile->begin_tiles[0] =  tile;
@@ -136,21 +140,21 @@ void ClusterSequence::_initialise_tiles() {
 	// idphi=-1 to idphi=+1, because it takes care of
 	// negative and positive boundaries
 	for (int idphi = -1; idphi <=+1; idphi++) {
-	  *pptile = & _tiles[_tile_index(ieta-1,iphi+idphi)];
+	  *pptile = & (*_tiles)[_tile_index(ieta-1,iphi+idphi)];
 	  pptile++;
 	}	
       }
       // now set up last L (below X)
-      *pptile = & _tiles[_tile_index(ieta,iphi-1)];
+      *pptile = & (*_tiles)[_tile_index(ieta,iphi-1)];
       pptile++;
       // set up first R (above X)
       tile->RH_tiles = pptile;
-      *pptile = & _tiles[_tile_index(ieta,iphi+1)];
+      *pptile = & (*_tiles)[_tile_index(ieta,iphi+1)];
       pptile++;
       // set up remaining R's, to the right of X
       if (ieta < _tiles_ieta_max) {
 	for (int idphi = -1; idphi <= +1; idphi++) {
-	  *pptile = & _tiles[_tile_index(ieta+1,iphi+idphi)];
+	  *pptile = & (*_tiles)[_tile_index(ieta+1,iphi+idphi)];
 	  pptile++;
 	}	
       }
@@ -160,6 +164,8 @@ void ClusterSequence::_initialise_tiles() {
       tile->tagged = false;
     }
   }
+
+  if (multicore) { SEND_TILES_TO_THREADS( (*_tiles) ) ; }
 
 }
 
@@ -200,7 +206,7 @@ inline void ClusterSequence::_tj_set_jetinfo( TiledJet * const jet,
   jet->tile_index = _tile_index(jet->eta, jet->phi);
 
   // Insert it into the tile's linked list of jets
-  Tile * tile = &_tiles[jet->tile_index];
+  Tile * tile = &(*_tiles)[jet->tile_index];
   jet->previous   = NULL;
   jet->next       = tile->head;
   if (jet->next != NULL) {jet->next->previous = jet;}
@@ -211,9 +217,9 @@ inline void ClusterSequence::_tj_set_jetinfo( TiledJet * const jet,
 //----------------------------------------------------------------------
 /// output the contents of the tiles
 void ClusterSequence::_print_tiles(TiledJet * briefjets ) const {
-  for (vector<Tile>::const_iterator tile = _tiles.begin(); 
-       tile < _tiles.end(); tile++) {
-    cout << "Tile " << tile - _tiles.begin()<<" = ";
+  for (vector<Tile>::const_iterator tile = (*_tiles).begin(); 
+       tile < (*_tiles).end(); tile++) {
+    cout << "Tile " << tile - (*_tiles).begin()<<" = ";
     vector<int> list;
     for (TiledJet * jetI = tile->head; jetI != NULL; jetI = jetI->next) {
       list.push_back(jetI-briefjets);
@@ -235,10 +241,10 @@ void ClusterSequence::_print_tiles(TiledJet * briefjets ) const {
 /// for end of vector at each stage to decide whether to resize it)
 void ClusterSequence::_add_neighbours_to_tile_union(const int tile_index, 
 	       vector<int> & tile_union, int & n_near_tiles) const {
-  for (Tile * const * near_tile = _tiles[tile_index].begin_tiles; 
-       near_tile != _tiles[tile_index].end_tiles; near_tile++){
+  for (Tile * const * near_tile = (*_tiles)[tile_index].begin_tiles; 
+       near_tile != (*_tiles)[tile_index].end_tiles; near_tile++){
     // get the tile number
-    tile_union[n_near_tiles] = *near_tile - & _tiles[0];
+    tile_union[n_near_tiles] = *near_tile - & (*_tiles)[0];
     n_near_tiles++;
   }
 }
@@ -251,12 +257,12 @@ void ClusterSequence::_add_neighbours_to_tile_union(const int tile_index,
 inline void ClusterSequence::_add_untagged_neighbours_to_tile_union(
                const int tile_index, 
 	       vector<int> & tile_union, int & n_near_tiles)  {
-  for (Tile ** near_tile = _tiles[tile_index].begin_tiles; 
-       near_tile != _tiles[tile_index].end_tiles; near_tile++){
+  for (Tile ** near_tile = (*_tiles)[tile_index].begin_tiles; 
+       near_tile != (*_tiles)[tile_index].end_tiles; near_tile++){
     if (! (*near_tile)->tagged) {
       (*near_tile)->tagged = true;
       // get the tile number
-      tile_union[n_near_tiles] = *near_tile - & _tiles[0];
+      tile_union[n_near_tiles] = *near_tile - & (*_tiles)[0];
       n_near_tiles++;
     }
   }
@@ -267,13 +273,29 @@ inline void ClusterSequence::_add_untagged_neighbours_to_tile_union(
 /// run a tiled clustering
 void ClusterSequence::_tiled_N2_cluster() {
 
-  _initialise_tiles();
-
+  if (!multicore)
+    { _initialise_tiles(); }
+  else
+  {
+    if (firstevent)
+      { _initialise_tiles(); } 
+    else
+    {
+      CLEAN_TILES();
+        // assigns _tiles to point at the memory location 
+        // contained in concurrency/TiledN2.cc
+      _tiles = & _ptiles ;
+    }
+    WAIT_FOR_THREADS() ;
+    BOTTOM = false ;
+    RESET_FLAG() ;
+  }
+  
   int n = _jets.size();
   TiledJet * briefjets = new TiledJet[n];
   TiledJet * jetA = briefjets, * jetB;
   TiledJet oldB;
-  
+  oldB.tile_index=0; // prevents a gcc warning  
 
   // will be used quite deep inside loops, but declare it here so that
   // memory (de)allocation gets done only once
@@ -288,27 +310,39 @@ void ClusterSequence::_tiled_N2_cluster() {
   TiledJet * tail = jetA; // a semaphore for the end of briefjets
   TiledJet * head = briefjets; // a nicer way of naming start
 
-  // set up the initial nearest neighbour information
-  vector<Tile>::const_iterator tile;
-  for (tile = _tiles.begin(); tile != _tiles.end(); tile++) {
-    // first do it on this tile
-    for (jetA = tile->head; jetA != NULL; jetA = jetA->next) {
-      for (jetB = tile->head; jetB != jetA; jetB = jetB->next) {
-	double dist = _bj_dist(jetA,jetB);
-	if (dist < jetA->NN_dist) {jetA->NN_dist = dist; jetA->NN = jetB;}
-	if (dist < jetB->NN_dist) {jetB->NN_dist = dist; jetB->NN = jetA;}
-      }
-    }
-    // then do it for RH tiles
-    for (Tile ** RTile = tile->RH_tiles; RTile != tile->end_tiles; RTile++) {
+  cout << &_ptiles ;
+  if(!multicore)
+  {
+    // set up the initial nearest neighbour information
+    vector<Tile>::const_iterator tile;
+    for (tile = (*_tiles).begin(); tile != (*_tiles).end(); tile++) {
+      // first do it on this tile
       for (jetA = tile->head; jetA != NULL; jetA = jetA->next) {
-	for (jetB = (*RTile)->head; jetB != NULL; jetB = jetB->next) {
-	  double dist = _bj_dist(jetA,jetB);
-	  if (dist < jetA->NN_dist) {jetA->NN_dist = dist; jetA->NN = jetB;}
-	  if (dist < jetB->NN_dist) {jetB->NN_dist = dist; jetB->NN = jetA;}
-	}
+        for (jetB = tile->head; jetB != jetA; jetB = jetB->next) {
+  	  double dist = _bj_dist(jetA,jetB);
+  	  if (dist < jetA->NN_dist) {jetA->NN_dist = dist; jetA->NN = jetB;}
+  	  if (dist < jetB->NN_dist) {jetB->NN_dist = dist; jetB->NN = jetA;}
+        }
+      }
+      // then do it for RH tiles
+      for (Tile ** RTile = tile->RH_tiles; RTile != tile->end_tiles; RTile++) {
+        for (jetA = tile->head; jetA != NULL; jetA = jetA->next) {
+	  for (jetB = (*RTile)->head; jetB != NULL; jetB = jetB->next) {
+	    double dist = _bj_dist(jetA,jetB);
+	    if (dist < jetA->NN_dist) {jetA->NN_dist = dist; jetA->NN = jetB;}
+	    if (dist < jetB->NN_dist) {jetB->NN_dist = dist; jetB->NN = jetA;}
+	  }
+        }
       }
     }
+  }
+  else //do multicore stuff
+  {
+    TOP = true ;
+    WAIT_FOR_THREADS() ;
+    TOP = false ;
+    RESET_FLAG() ;
+    BOTTOM = true ;
   }
   
   // now create the diJ (where J is i's NN) table -- remember that 
@@ -426,7 +460,7 @@ void ClusterSequence::_tiled_N2_cluster() {
       // pointers to jetA (from predecessors, successors and the tile
       // head if need be)
       if (jetA->previous == NULL) {
-	_tiles[jetA->tile_index].head = jetA;
+	(*_tiles)[jetA->tile_index].head = jetA;
       } else {
 	jetA->previous->next = jetA;
       }
@@ -436,7 +470,7 @@ void ClusterSequence::_tiled_N2_cluster() {
     // Initialise jetB's NN distance as well as updating it for 
     // other particles.
     for (int itile = 0; itile < n_near_tiles; itile++) {
-      Tile * tile_ptr = &_tiles[tile_union[itile]];
+      Tile * tile_ptr = &(*_tiles)[tile_union[itile]];
       for (TiledJet * jetI = tile_ptr->head; jetI != NULL; jetI = jetI->next) {
 	// see if jetI had jetA or jetB as a NN -- if so recalculate the NN
 	if (jetI->NN == jetA || (jetI->NN == jetB && jetB != NULL)) {
@@ -481,8 +515,8 @@ void ClusterSequence::_tiled_N2_cluster() {
     //cout << n<<" "<<briefjets[95].NN-briefjets<<" "<<briefjets[95].NN_dist <<"\n";
 
     // remember to update pointers to tail
-    for (Tile ** near_tile = _tiles[tail->tile_index].begin_tiles; 
-	         near_tile!= _tiles[tail->tile_index].end_tiles; near_tile++){
+    for (Tile ** near_tile = (*_tiles)[tail->tile_index].begin_tiles; 
+	         near_tile!= (*_tiles)[tail->tile_index].end_tiles; near_tile++){
       // and then the contents of that tile
       for (TiledJet * jetJ = (*near_tile)->head; 
 	             jetJ != NULL; jetJ = jetJ->next) {
@@ -503,6 +537,7 @@ void ClusterSequence::_tiled_N2_cluster() {
   // final cleaning up;
   delete[] diJ;
   delete[] briefjets;
+  firstevent = false;
 }
 
 
@@ -516,7 +551,7 @@ void ClusterSequence::_faster_tiled_N2_cluster() {
   TiledJet * briefjets = new TiledJet[n];
   TiledJet * jetA = briefjets, * jetB;
   TiledJet oldB;
-  
+  oldB.tile_index=0; // prevents a gcc warning  
 
   // will be used quite deep inside loops, but declare it here so that
   // memory (de)allocation gets done only once
@@ -532,7 +567,7 @@ void ClusterSequence::_faster_tiled_N2_cluster() {
 
   // set up the initial nearest neighbour information
   vector<Tile>::const_iterator tile;
-  for (tile = _tiles.begin(); tile != _tiles.end(); tile++) {
+  for (tile = (*_tiles).begin(); tile != (*_tiles).end(); tile++) {
     // first do it on this tile
     for (jetA = tile->head; jetA != NULL; jetA = jetA->next) {
       for (jetB = tile->head; jetB != jetA; jetB = jetB->next) {
@@ -667,7 +702,7 @@ void ClusterSequence::_faster_tiled_N2_cluster() {
     // other particles.
     // Run over all tiles in our union 
     for (int itile = 0; itile < n_near_tiles; itile++) {
-      Tile * tile_ptr = &_tiles[tile_union[itile]];
+      Tile * tile_ptr = &(*_tiles)[tile_union[itile]];
       tile_ptr->tagged = false; // reset tag, since we're done with unions
       // run over all jets in the current tile
       for (TiledJet * jetI = tile_ptr->head; jetI != NULL; jetI = jetI->next) {
@@ -733,6 +768,7 @@ void ClusterSequence::_minheap_faster_tiled_N2_cluster() {
   TiledJet * briefjets = new TiledJet[n];
   TiledJet * jetA = briefjets, * jetB;
   TiledJet oldB;
+  oldB.tile_index=0; // prevents a gcc warning
   
 
   // will be used quite deep inside loops, but declare it here so that
@@ -749,7 +785,7 @@ void ClusterSequence::_minheap_faster_tiled_N2_cluster() {
 
   // set up the initial nearest neighbour information
   vector<Tile>::const_iterator tile;
-  for (tile = _tiles.begin(); tile != _tiles.end(); tile++) {
+  for (tile = (*_tiles).begin(); tile != (*_tiles).end(); tile++) {
     // first do it on this tile
     for (jetA = tile->head; jetA != NULL; jetA = jetA->next) {
       for (jetB = tile->head; jetB != jetA; jetB = jetB->next) {
@@ -873,7 +909,7 @@ void ClusterSequence::_minheap_faster_tiled_N2_cluster() {
     // other particles.
     // Run over all tiles in our union 
     for (int itile = 0; itile < n_near_tiles; itile++) {
-      Tile * tile_ptr = &_tiles[tile_union[itile]];
+      Tile * tile_ptr = &(*_tiles)[tile_union[itile]];
       tile_ptr->tagged = false; // reset tag, since we're done with unions
       // run over all jets in the current tile
       for (TiledJet * jetI = tile_ptr->head; jetI != NULL; jetI = jetI->next) {

@@ -45,6 +45,7 @@
 #include "fastjet/LimitedWarning.hh"
 #include "fastjet/FunctionOfPseudoJet.hh"
 #include "fastjet/ClusterSequenceStructure.hh"
+#include "concurrency/Scheduler.hh"
 
 FASTJET_BEGIN_NAMESPACE      // defined in fastjet/internal/base.hh
 
@@ -843,9 +844,11 @@ protected:
     /// start of list of BriefJets contained in this tile
     TiledJet * head;    
     /// sometimes useful to be able to tag a tile
-    bool     tagged;    
+    bool     tagged;   
+    /// a counter for tiles, useful for assigning locks
+    int      address; 
   };
-  std::vector<Tile> _tiles;
+  std::vector<Tile> * _tiles;
   double _tiles_eta_min, _tiles_eta_max;
   double _tile_size_eta, _tile_size_phi;
   int    _n_tiles_phi,_tiles_ieta_min,_tiles_ieta_max;
