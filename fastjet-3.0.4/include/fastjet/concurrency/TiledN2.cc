@@ -1,34 +1,82 @@
 
 
 
-
-void SEND_TILES_TO_THREADS( vector<Tile> _tiles )
+void INIT_THREADS( vector< vector<Tile> *> & buffs, vector< mutex > & locks  )
 {
-  flag = _tiles.size() ;
-  for ( int i = 0 ; i < _tiles.size() ; i++ )
+  for ( int i = 0 ; i < NCORES ; i++ )
   {
-    Tile * tilee = &_tiles[i] ;
-    (*tilee).address = i ;
-    boost::mutex _mtxqaz ;
-    _tile_mutex.push_back( _mtxqaz ) ;
+    // Some how you have to keep track of pbuff!
+    std::vector<Tile> * pbuff = new std::vector<Tile>() ;
+    mylock = getMutexFromSomewhere(); 
+    buffs.push_back( pbuff );
+    locks.push_back( mylock );
 
-    TGROUP.create_thread( boost::bind( &NN_INITIALIZATION , tilee ) ) ;
+    TGROUP.create_thread( boost::bind( &NN_INITIALIZATION , pbuff ) ) ;
   }
+  
+}
+
+
+
+void SEND_TILES_TO_THREADS( vector<Tile> const & _tiles, vector< vector<Tile> * > & buffs, vector<mutex> & locks )
+{
+  // Steps : 
+  // 1. lock buffer (stored in "buffs"
+  // 2. copy tiles to buffer
+  // 3. unlock buffer
+  // 4. Signal "computation" to go 
+  // 5. Access result
+
+
+  for ( int nthread = 0 ; nthread < NTHREAD; ++nthread ) {
+    // 1. Lock buffer
+    locks[nthread].lock();
+
+    // 2. Copy the data
+    // Here you do the tile ---> buffer allocation logic you prefer. 
+    // This is what we will play with! 
+    copy( _tiles.begin(), _tiles.end(), buffs[nthread].begin() );  // Check the syntax ??
+
+
+    // 3. Unlock buffer
+    
+    locks[nthread].unlock();
+  }
+
+  // 4. Signal computation to "go"
+  // (Maybe as simple as waiting for buffer.size() > 0
+
+  // 5. Get the result
+  // 
+  // Clients lock the buffer
+  // Clients release the data
+  // Clients unlock the buffer
+
+
+  
+  
+
 }
 
 void CLEAN_TILES() // remove bj from tiles???
 {
-  for int ( i = 0 ; i < _ptiles.size ; i++ )
-  {
-    Tile * tilee = &_ptiles[i] ;
-    *tilee = NULL ;
-    (*tilee).tagged = false ;
+
+  // Wait until all calculations are done (critical!)
+  // 
+
+  for (  vector< vector<Tile> *>::iterator i = buffs.begin(); i != buffs.end(); ++i ) {
+    if ( *i != 0 ) delete *i;
   }
 }
 
 void WAIT_FOR_THREADS()
 {
-  while( flag > 0 ) {/*  WAIT HERE  */} //if threads are still working, wait here
+  while( 1 ) {
+
+    lock();
+    check();
+    unlock(); 
+/*  WAIT HERE  */} //if threads are still working, wait here
 }
 
 void RESET_FLAG()
