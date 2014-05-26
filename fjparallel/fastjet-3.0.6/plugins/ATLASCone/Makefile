@@ -152,7 +152,7 @@ am__relativize = \
   reldir="$$dir2"
 ACLOCAL = ${SHELL} /home/jcgoodru/Desktop/fastjet/fjparallel/fastjet-3.0.6/missing --run aclocal-1.11
 AMTAR = ${SHELL} /home/jcgoodru/Desktop/fastjet/fjparallel/fastjet-3.0.6/missing --run tar
-AM_CXXFLAGS = -O3 -Wall  -g  -Woverloaded-virtual  -DDROP_CGAL 
+AM_CXXFLAGS =  -g  -Woverloaded-virtual  -DDROP_CGAL 
 AM_FCFLAGS = 
 AM_FFLAGS = 
 AR = ar
@@ -165,19 +165,19 @@ CCDEPMODE = depmode=gcc3
 CFLAGS = -g -O2
 CGAL_CPPFLAGS = 
 CGAL_LIBS = 
-CONFIGURE_INVOCATION = ./configure  '--prefix=/home/jcgoodru/../fastjet-install'
+CONFIGURE_INVOCATION = ./configure  '--prefix=/home/jcgoodru/Desktop/fastjet/fjparallel/fastjet-3.0.6/../fastjet-install' 'CXXFLAGS=-std=c++11' 'LIBS=-lpthread'
 CONFIG_CXXFLAGS = 
 CONFIG_LIBS =  -lm 
 CONFIG_LIBS_PLUGINS =  -lfastjetplugins  -lsiscone_spherical -lsiscone
 CONFIG_LIBS_PLUGINS_STATIC =  ${installationdir}/lib/libfastjetplugins.a  ${installationdir}/lib/libsiscone.a ${installationdir}/lib/libsiscone_spherical.a
 CONFIG_RUNPATH_FLAGS = -Wl,--enable-new-dtags
-CONFIG_SUMMARY = Configuration summary:\n----------------------\n  Installation directory     /home/jcgoodru/../fastjet-install\n  Shared libraries           yes\n  Static libraries           yes\n  Debug flag                 yes\n  CGAL support               no\n  Plugins: EECambridge       yes\n           Jade              yes\n           NestedDefs        yes\n           SISCone           yes\n           CDFCones          yes\n           D0RunICone        no\n           D0RunIICone       no\n           ATLASCone         no\n           CMSIterativeCone  no\n           PxCone            no\n           TrackJet          no\n           GridJet           yes\n  Monolithic plugins lib     yes\n
+CONFIG_SUMMARY = Configuration summary:\n----------------------\n  Installation directory     /home/jcgoodru/Desktop/fastjet/fjparallel/fastjet-3.0.6/../fastjet-install\n  Shared libraries           yes\n  Static libraries           yes\n  Debug flag                 yes\n  CGAL support               no\n  Plugins: EECambridge       yes\n           Jade              yes\n           NestedDefs        yes\n           SISCone           yes\n           CDFCones          yes\n           D0RunICone        no\n           D0RunIICone       no\n           ATLASCone         no\n           CMSIterativeCone  no\n           PxCone            no\n           TrackJet          no\n           GridJet           yes\n  Monolithic plugins lib     yes\n
 CPP = gcc -E
 CPPFLAGS = 
 CXX = g++
 CXXCPP = g++ -E
 CXXDEPMODE = depmode=gcc3
-CXXFLAGS = 
+CXXFLAGS = -std=c++11
 CYGPATH_W = echo
 D0_CXXFLAGS = 
 DEFS = -DHAVE_CONFIG_H
@@ -207,7 +207,7 @@ INSTALL_STRIP_PROGRAM = $(install_sh) -c -s
 LD = /usr/bin/ld
 LDFLAGS = 
 LIBOBJS = 
-LIBS = -lm 
+LIBS = -lm -lpthread
 LIBTOOL = $(SHELL) $(top_builddir)/libtool
 LIPO = 
 LIST_ALL_PLUGINS =  SISCone CDFCones NestedDefs EECambridge Jade GridJet
@@ -278,7 +278,7 @@ mandir = ${datarootdir}/man
 mkdir_p = /bin/mkdir -p
 oldincludedir = /usr/include
 pdfdir = ${docdir}
-prefix = /home/jcgoodru/../fastjet-install
+prefix = /home/jcgoodru/Desktop/fastjet/fjparallel/fastjet-3.0.6/../fastjet-install
 program_transform_name = s,x,x,
 psdir = ${docdir}
 sbindir = ${exec_prefix}/sbin

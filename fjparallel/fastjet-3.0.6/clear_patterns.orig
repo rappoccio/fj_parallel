@@ -1,0 +1,16 @@
+:#
+^#
+version
+strategy
+CGAL
+SISCone
+pxcone: +[a-zA-Z*]
+pxcone: *$
+WARNING
+^pxcone:
+^d0runiicone:
+^trackjet:
+^atlascone:
+^cmsiterativecone:
+^d0runipre96cone:
+^d0runicone:

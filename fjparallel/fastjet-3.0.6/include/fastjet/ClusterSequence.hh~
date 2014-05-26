@@ -904,137 +904,134 @@ protected:
   template<class L> ClusterSequence (
 			          const std::vector<L> & pseudojets,
 				  const JetDefinition & jet_def,
+                                  const ThreadManager & buffertman,
 				  const std::vector<Tile> & buffertiles, //**//
 				  const bool & writeout_combinations = false);
-/*
-      TODO : figure out how to make concurrent ctor initialise:
-                    s_multicore = true ;
-                   (s_firstevent = variable)
-      TODO : figure out how to make singlecore ctor initialise:
-                    s_multicore = false ;
-                    s_firstevent = true ;
-      TODO : if s_firstevent exists in here, figure out how to
-             let it know it's state (since it's not global)
-*/
-
-
-  bool s_multicore ;
-  bool s_firstevent ;
-  bool s_top ;
-  bool s_bottom ;
-  int s_flag ;
-  boost::mutex s_topmtx ;
-  boost::mutex s_bottommtx ;
-  boost::mutex s_flagmtx ;
-  boost::thread_group s_tilethreads ;
-  std::vector<boost::mutex*> s_tilelocks ;
 
 
 
-  void st_COUT_FLAG( std::string S ){
-    s_flagmtx.lock() ;
-    std::cout << S << s_flag ;
-    s_flagmtx.unlock() ;
-  }
+class ThreadManager{ //all objects are private, have public get methods
+ 
+ // private :  TODO : remove, these are probably unnecessary objects/methods
+   // std::vector<fastjet::PseudoJet> _bufferjets;
+   // std::vector<fastjet::ClusterSequence::Tile> * _buffertiles;
+ // public :
+   // std::vector<fastjet::PseudoJet> getJets() { return _bufferjets; }
+   // std::vector<fastjet::ClusterSequence::Tile> getTiles(){ return _buffertiles; }
 
-  void s_RESET_FLAG(){
-    s_flagmtx.lock() ;
-    s_flag = _tiles->size() ;
-    s_flagmtx.unlock() ;
-  }
 
-  void CLEAN_TILES(){
-    for ( unsigned int i = 0 ; i < _tiles->size() ; ++i ){
-      (*_tiles)[i].head = NULL ;
-      (*_tiles)[i].tagged = false ;
+  private :
+    bool multi;   // multi, first, and all related methods are
+    bool first;   // only accessed by the main, scheduling thread
+  public :
+    bool getMulti(){ return multi; }
+    bool getFirst(){ return first; }
+    bool setFirst(){ first = false; }
+
+            // singleCore method is used by the "regular" ClusterSequence ctor
+  public :  // and multiCore is used before passing in a ThreadManager object
+    void singleCore(){ 
+      multi = false;
+      first = true;
     }
-  }
-  void s_NOTIFY_MAIN(){
-    s_flagmtx.lock() ;
-    --s_flag ;
-    s_flagmtx.unlock() ;
-  }
-
-  void s_WAIT_FOR_THREADS(){
-    while(1){
-      s_flagmtx.lock() ;
-      if ( s_flag == 0 ){
-        s_flagmtx.unlock() ;
-        break ;
-      }
-      s_flagmtx.unlock() ;
+    void multiCore(){
+      multi = true;
+      first = true;
     }
-  }
 
-  void s_NN_INIT( Tile *tile ){//one thread per tile
-    TiledJet * jetA ;
-    TiledJet * jetB ;
-    while(1){
-      s_NOTIFY_MAIN() ;  
+
+  public :
+    std::mutex m_flag;
+    std::mutex m_flow;
+    std::vector<std::mutex*> vm_tiles;
+
+
+  private :
+    unsigned int flag;
+  public :
+    int getFlag(){ return flag; }
+    void decFlag(){ 
+      m_flag.lock();
+        --flag;
+      m_flag.unlock();
+    }
+    void resetFlag(){
+      m_flag.lock();
+        flag = _bufftiles->size();
+      m_flag.unlock();
+    }
+    void coutFlag( std::string S ){
+      m_flag.lock();
+        std::cout << S << flag;
+      m_flag.unlock();
+    }
+
+
+  private :
+    bool top;
+    bool bottom;
+  public :
+    bool getTop(){ return top; }
+    bool getBottom(){ return bottom; }
+    void openTop(){
+      m_flow.lock();
+      top = true;
+      m_flow.unlock();
+    }
+    void openBottom(){
+      m_flow.lock();
+      bottom = true;
+      m_flow.unlock();
+    }
+    void closeTop(){
+      m_flow.lock();
+      top = false;
+      m_flow.unlock();
+    }
+    void closeBottom(){
+      m_flow.lock();
+      bottom = false;
+      m_flow.unlock();
+    }
+    void waitTop(){ // SHOULD I USE m_top INSTEAD?
+      m_flow.lock();
+        if(top) {m_flow.unlock(); break;}
+      m_flow.unlock();
+    }
+    void waitBottom(){  // SHOULD I USE m_bottom INSTEAD?
+      m_flow.lock();
+        if(bottom) {m_flow.unlock(); break;}
+      m_flow.unlock();
+    }
+
+
+  public :
+    void waitOnThreads(){
       while(1){
-        s_topmtx.lock() ;
-        if(s_top) {break;}
-        s_topmtx.unlock() ;
-      }
-      st_COUT_FLAG(" go: ") ;
-      // set up the initial nearest neighbour information
-      s_tilelocks[tile->address]->lock() ;
-      // first do it on this tile
-      for (jetA = tile->head; jetA != NULL; jetA = jetA->next) {
-        for (jetB = tile->head; jetB != jetA; jetB = jetB->next) {
-          double dist = _bj_dist(jetA,jetB);
-          if (dist < jetA->NN_dist) {jetA->NN_dist = dist; jetA->NN = jetB;}
-          if (dist < jetB->NN_dist) {jetB->NN_dist = dist; jetB->NN = jetA;}
-        }
-      }
-      s_tilelocks[tile->address]->unlock() ;
-      // then do it for RH tiles
-      for (Tile ** RTile = tile->RH_tiles; RTile != tile->end_tiles; RTile++) {
-        bool lock1 = false ;
-        bool lock2 = false ;
-        while(1){
-          lock1 = s_tilelocks[tile->address]->try_lock() ;
-          lock2 = s_tilelocks[(*RTile)->address]->try_lock() ;
-          if ((lock1) && (lock2)) { break ; }
-          else{
-            if(lock1) { s_tilelocks[tile->address]->unlock() ; }
-            if(lock2) { s_tilelocks[(*RTile)->address]->unlock() ; }
+        m_flag.lock()
+          if( flag == 0 ){
+            m_flag.unlock();
+            break;
           }
-        }
-        for (jetA = tile->head; jetA != NULL; jetA = jetA->next) {
-          for (jetB = (*RTile)->head; jetB != NULL; jetB = jetB->next) {
-            double dist = _bj_dist(jetA,jetB);
-            if (dist < jetA->NN_dist) {jetA->NN_dist = dist; jetA->NN = jetB;}
-            if (dist < jetB->NN_dist) {jetB->NN_dist = dist; jetB->NN = jetA;}
-          }
-        }
-        s_tilelocks[tile->address]->unlock() ;
-        s_tilelocks[(*RTile)->address]->unlock() ;
+        m_flag.unlock();
       }
-      while(1){
-        s_bottommtx.lock() ;
-        if(s_bottom) {break;}
-        s_bottommtx.unlock() ;
-      }
-      st_COUT_FLAG(" done: ") ;
-    }//end while(1)
-  }
-
-  void s_CREATE_THREADS() {
-    for ( unsigned int i = 0 ; i < (*_tiles).size() ; ++i ) {
-      Tile * tile = &((*_tiles)[i]) ;
-      tile->address = i ;
-      boost::mutex * _mtxqaz ;
-      s_tilelocks.push_back( _mtxqaz ) ;
-      s_tilethreads.create_thread(  boost::bind( & s_NN_INIT , tile)  ) ;
-
-      /*Tile * tile = &((*_tiles)[i]) ;
-      tile->address = i ;
-      boost::mutex * _mtxqaz ;
-      s_tilelocks.push_back( _mtxqaz ) ;
-      s_tilethreads.create_thread(boost::bind(&threadstruct::s_NN_INIT, tile));*/
     }
-  }
+    void grabTwoLocks( int Q1, int Q2 ){
+      bool lock1 = false;
+      bool lock2 = false;
+      while(1){
+        lock1 = (tman->vm_tiles[Q1])->try_lock();
+        lock2 = (tman->vm_tiles[Q2])->try_lock();
+        if ((lock1) && (lock2)) { break; }
+        else{
+          if(lock1) { tman->vm_tiles[Q1]->unlock(); }
+          if(lock2) { tman->vm_tiles[Q2]->unlock(); }
+        }
+      }
+    }
+} // end ThreadManager Class
+
+
 
 
 

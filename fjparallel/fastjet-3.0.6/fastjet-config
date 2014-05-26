@@ -9,8 +9,8 @@
 
 # the list of plugins is dynamic so we need the following
 # line to deal with the static lib link
-installationdir=/home/jcgoodru/../fastjet-install
-prefix=/home/jcgoodru/../fastjet-install
+installationdir=/home/jcgoodru/Desktop/fastjet/fjparallel/fastjet-3.0.6/../fastjet-install
+prefix=/home/jcgoodru/Desktop/fastjet/fjparallel/fastjet-3.0.6/../fastjet-install
 exec_prefix=${prefix}
 
 # print a usage message and exit
@@ -298,7 +298,7 @@ case $found_query in
 	echo 3.0.6
 	;;
     prefix)
-	echo /home/jcgoodru/../fastjet-install
+	echo /home/jcgoodru/Desktop/fastjet/fjparallel/fastjet-3.0.6/../fastjet-install
 	;;
     cxxflags)
 	echo -I${prefix}/include 
@@ -346,8 +346,8 @@ case $found_query in
 	echo ""
 	echo "Configuration invocation was"
 	echo ""
-	echo "  ./configure  '--prefix=/home/jcgoodru/../fastjet-install'"
+	echo "  ./configure  '--prefix=/home/jcgoodru/Desktop/fastjet/fjparallel/fastjet-3.0.6/../fastjet-install' 'CXXFLAGS=-std=c++11' 'LIBS=-lpthread'"
 	echo ""
-	printf "Configuration summary:\n----------------------\n  Installation directory     /home/jcgoodru/../fastjet-install\n  Shared libraries           yes\n  Static libraries           yes\n  Debug flag                 yes\n  CGAL support               no\n  Plugins: EECambridge       yes\n           Jade              yes\n           NestedDefs        yes\n           SISCone           yes\n           CDFCones          yes\n           D0RunICone        no\n           D0RunIICone       no\n           ATLASCone         no\n           CMSIterativeCone  no\n           PxCone            no\n           TrackJet          no\n           GridJet           yes\n  Monolithic plugins lib     yes\n"
+	printf "Configuration summary:\n----------------------\n  Installation directory     /home/jcgoodru/Desktop/fastjet/fjparallel/fastjet-3.0.6/../fastjet-install\n  Shared libraries           yes\n  Static libraries           yes\n  Debug flag                 yes\n  CGAL support               no\n  Plugins: EECambridge       yes\n           Jade              yes\n           NestedDefs        yes\n           SISCone           yes\n           CDFCones          yes\n           D0RunICone        no\n           D0RunIICone       no\n           ATLASCone         no\n           CMSIterativeCone  no\n           PxCone            no\n           TrackJet          no\n           GridJet           yes\n  Monolithic plugins lib     yes\n"
 	;;
 esac

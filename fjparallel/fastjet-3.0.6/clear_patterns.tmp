@@ -1,0 +1,9 @@
+:#
+^#
+version
+strategy
+CGAL
+SISCone
+pxcone: +[a-zA-Z*]
+pxcone: *$
+WARNING

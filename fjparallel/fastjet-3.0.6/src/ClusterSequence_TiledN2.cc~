@@ -83,7 +83,7 @@ void ClusterSequence::_bj_remove_from_tiles(TiledJet * const jet) {
 ///
 void ClusterSequence::_initialise_tiles() {
 
- if (s_firstevent) { //**//
+ if (tman->getFirst()) { //**//
   // first decide tile sizes (with a lower bound to avoid huge memory use with
   // very small R)
   double default_size = max(0.1,_Rparam);
@@ -145,7 +145,7 @@ void ClusterSequence::_initialise_tiles() {
       *pptile = &((*_tiles)[_tile_index(ieta,iphi-1)]); //**//
       pptile++;
       // set up first R (above X)
-      tile->RH_tiles = pptile;
+      tile->RH_tiles = pptile; //**//
       *pptile = &((*_tiles)[_tile_index(ieta,iphi+1)]); //**//
       pptile++;
       // set up remaining R's, to the right of X
@@ -156,13 +156,12 @@ void ClusterSequence::_initialise_tiles() {
 	}	
       }
       // now put semaphore for end tile
-      tile->end_tiles = pptile;
+      tile->end_tiles = pptile; //**//
       // finally make sure tiles are untagged
-      tile->tagged = false;
+      tile->tagged = false; //**//
     }
   }
-  if ( s_multicore ) { s_CREATE_THREADS() ; } //**//
- }else{ s_CLEAN_TILES() ; } // end if(s_firstevent) //**//
+  if ( tman->getMulti() ) { s_CREATE_THREADS(); } //**//
 }
 
 
@@ -269,8 +268,19 @@ inline void ClusterSequence::_add_untagged_neighbours_to_tile_union(
 /// run a tiled clustering
 void ClusterSequence::_tiled_N2_cluster() {
 
-  _tiles = ( s_multicore ? &bufftiles : &memtiles ) ;  //**//
-  // memtiles is a vector (added to CS.hh).  This is used in singlecore
+//  TODO : assign _tiles in both the single/parallel ctors:
+//  TODO : initialise tman* in both the single/parallel ctors:
+//  TODO : make sure every clustersequence has an uninitialized pointer, tman
+
+
+
+/*    somewhere after def. of TM class, declare:  "ThreadManager * tman;"
+
+          //Sctor:     tman->singleCore();
+                       _tiles = &singlecoretiles;
+          //Pctor:     tman = '&referentThreadManagerPassedIn';
+                       _tiles = &referentTilesPassedIn;
+*/
 
   _initialise_tiles();
 
@@ -293,7 +303,16 @@ void ClusterSequence::_tiled_N2_cluster() {
   TiledJet * tail = jetA; // a semaphore for the end of briefjets
   TiledJet * head = briefjets; // a nicer way of naming start
 
- if ( !s_multicore ) { //**//
+  if ( tman->getmulti() ){  //**//
+    tman->waitOnThreads(); //**//
+    tman->closeBottom(); //**//
+    tman->resetFlag(); //**//
+    tman->openTop(); //**//
+    tman->waitOnThreads(); //**//
+    tman->closeTop(); //**//
+    tman->resetFlag(); //**//  
+    tman->openBottom(); //**//
+  } else { //**//
   // set up the initial nearest neighbour information
   vector<Tile>::const_iterator tile;
   for (tile = _tiles->begin(); tile != _tiles->end(); tile++) { //**//
@@ -316,19 +335,6 @@ void ClusterSequence::_tiled_N2_cluster() {
       }
     }
   }
-} else {  //**//
-  s_topmtx.lock() ; //**//
-  s_top = true ; //**//
-  s_topmtx.unlock() ; //**//
-  s_WAIT_FOR_THREADS() ; //**//
-  s_topmtx.lock() ; //**//
-  s_top = false ; //**//
-  s_topmtx.unlock() ; //**//
-  s_RESET_FLAG() ; //**//
-  s_bottommtx.lock() ; //**//
-  s_bottom = true ; //**//
-  s_bottommtx.unlock() ; //**//
-} //**//
 
 
 
@@ -526,7 +532,7 @@ void ClusterSequence::_tiled_N2_cluster() {
   // final cleaning up;
   delete[] diJ;
   delete[] briefjets;
-  if ( s_multicore ) { s_firstevent = false ; } //**//
+  if (tman->getMulti()) {tman->setFirst();} //**//
 }
 
 /*

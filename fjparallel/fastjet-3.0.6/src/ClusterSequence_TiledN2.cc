@@ -43,7 +43,6 @@ FASTJET_BEGIN_NAMESPACE      // defined in fastjet/internal/base.hh
 
 using namespace std;
 
-
 //----------------------------------------------------------------------
 void ClusterSequence::_bj_remove_from_tiles(TiledJet * const jet) {
   Tile * tile = & ((*_tiles)[jet->tile_index]); //**//
@@ -83,7 +82,7 @@ void ClusterSequence::_bj_remove_from_tiles(TiledJet * const jet) {
 ///
 void ClusterSequence::_initialise_tiles() {
 
- if (s_firstevent) { //**//
+ if (tman->getFirst()) { //**//
   // first decide tile sizes (with a lower bound to avoid huge memory use with
   // very small R)
   double default_size = max(0.1,_Rparam);
@@ -145,7 +144,7 @@ void ClusterSequence::_initialise_tiles() {
       *pptile = &((*_tiles)[_tile_index(ieta,iphi-1)]); //**//
       pptile++;
       // set up first R (above X)
-      tile->RH_tiles = pptile;
+      tile->RH_tiles = pptile; //**//
       *pptile = &((*_tiles)[_tile_index(ieta,iphi+1)]); //**//
       pptile++;
       // set up remaining R's, to the right of X
@@ -156,15 +155,14 @@ void ClusterSequence::_initialise_tiles() {
 	}	
       }
       // now put semaphore for end tile
-      tile->end_tiles = pptile;
+      tile->end_tiles = pptile; //**//
       // finally make sure tiles are untagged
-      tile->tagged = false;
+      tile->tagged = false; //**//
     }
   }
-  if ( s_multicore ) { s_CREATE_THREADS() ; } //**//
- }else{ s_CLEAN_TILES() ; } // end if(s_firstevent) //**//
+  if ( tman->getMulti() ) { s_CREATE_THREADS(_tiles , tman); } //**//
+  }
 }
-
 
 //----------------------------------------------------------------------
 /// return the tile index corresponding to the given eta,phi point
@@ -269,7 +267,6 @@ inline void ClusterSequence::_add_untagged_neighbours_to_tile_union(
 /// run a tiled clustering
 void ClusterSequence::_tiled_N2_cluster() {
 
-  _tiles = ( s_multicore ? &buffertiles : &singlecoretiles ) ;  //**//
 
   _initialise_tiles();
 
@@ -292,43 +289,39 @@ void ClusterSequence::_tiled_N2_cluster() {
   TiledJet * tail = jetA; // a semaphore for the end of briefjets
   TiledJet * head = briefjets; // a nicer way of naming start
 
- if ( !s_multicore ) { //**//
-  // set up the initial nearest neighbour information
-  vector<Tile>::const_iterator tile;
-  for (tile = _tiles->begin(); tile != _tiles->end(); tile++) { //**//
-    // first do it on this tile
-    for (jetA = tile->head; jetA != NULL; jetA = jetA->next) {
-      for (jetB = tile->head; jetB != jetA; jetB = jetB->next) {
-	double dist = _bj_dist(jetA,jetB);
-	if (dist < jetA->NN_dist) {jetA->NN_dist = dist; jetA->NN = jetB;}
-	if (dist < jetB->NN_dist) {jetB->NN_dist = dist; jetB->NN = jetA;}
-      }
-    }
-    // then do it for RH tiles
-    for (Tile ** RTile = tile->RH_tiles; RTile != tile->end_tiles; RTile++) {
+  if ( tman->getMulti() ){  //**//
+    tman->waitOnThreads(); //**//
+    tman->closeBottom(); //**//
+    tman->resetFlag( _tiles ); //**//
+    tman->openTop(); //**//
+    tman->waitOnThreads(); //**//
+    tman->closeTop(); //**//
+    tman->resetFlag( _tiles ); //**//  
+    tman->openBottom(); //**//
+  } else { //**//
+    // set up the initial nearest neighbour information
+    vector<Tile>::const_iterator tile;
+    for (tile = _tiles->begin(); tile != _tiles->end(); tile++) { //**//
+      // first do it on this tile
       for (jetA = tile->head; jetA != NULL; jetA = jetA->next) {
-	for (jetB = (*RTile)->head; jetB != NULL; jetB = jetB->next) {
-	  double dist = _bj_dist(jetA,jetB);
-	  if (dist < jetA->NN_dist) {jetA->NN_dist = dist; jetA->NN = jetB;}
+        for (jetB = tile->head; jetB != jetA; jetB = jetB->next) {
+  	  double dist = _bj_dist(jetA,jetB);
+ 	  if (dist < jetA->NN_dist) {jetA->NN_dist = dist; jetA->NN = jetB;}
 	  if (dist < jetB->NN_dist) {jetB->NN_dist = dist; jetB->NN = jetA;}
-	}
+        }
+      }
+      // then do it for RH tiles
+      for (Tile ** RTile = tile->RH_tiles; RTile != tile->end_tiles; RTile++) {
+        for (jetA = tile->head; jetA != NULL; jetA = jetA->next) {
+  	  for (jetB = (*RTile)->head; jetB != NULL; jetB = jetB->next) {
+	    double dist = _bj_dist(jetA,jetB);
+	    if (dist < jetA->NN_dist) {jetA->NN_dist = dist; jetA->NN = jetB;}
+	    if (dist < jetB->NN_dist) {jetB->NN_dist = dist; jetB->NN = jetA;}
+ 	  }
+        }
       }
     }
   }
-} else {  //**//
-  s_topmtx.lock() ; //**//
-  s_top = true ; //**//
-  s_topmtx.unlock() ; //**//
-  s_WAIT_FOR_THREADS() ; //**//
-  s_topmtx.lock() ; //**//
-  s_top = false ; //**//
-  s_topmtx.unlock() ; //**//
-  s_RESET_FLAG() ; //**//
-  s_bottommtx.lock() ; //**//
-  s_bottom = true ; //**//
-  s_bottommtx.unlock() ; //**//
-} //**//
-
 
 
 
@@ -525,10 +518,10 @@ void ClusterSequence::_tiled_N2_cluster() {
   // final cleaning up;
   delete[] diJ;
   delete[] briefjets;
-  if ( s_multicore ) { s_firstevent = false ; } //**//
+  if (tman->getMulti()) {tman->setFirst();} //**//
 }
 
-/*
+
 //----------------------------------------------------------------------
 /// run a tiled clustering
 void ClusterSequence::_faster_tiled_N2_cluster() {
@@ -555,7 +548,7 @@ void ClusterSequence::_faster_tiled_N2_cluster() {
 
   // set up the initial nearest neighbour information
   vector<Tile>::const_iterator tile;
-  for (tile = _tiles.begin(); tile != _tiles.end(); tile++) {
+  for (tile = _tiles->begin(); tile != _tiles->end(); tile++) {
     // first do it on this tile
     for (jetA = tile->head; jetA != NULL; jetA = jetA->next) {
       for (jetB = tile->head; jetB != jetA; jetB = jetB->next) {
@@ -690,7 +683,7 @@ void ClusterSequence::_faster_tiled_N2_cluster() {
     // other particles.
     // Run over all tiles in our union 
     for (int itile = 0; itile < n_near_tiles; itile++) {
-      Tile * tile_ptr = &_tiles[tile_union[itile]];
+      Tile * tile_ptr = &(*_tiles)[tile_union[itile]];
       tile_ptr->tagged = false; // reset tag, since we're done with unions
       // run over all jets in the current tile
       for (TiledJet * jetI = tile_ptr->head; jetI != NULL; jetI = jetI->next) {
@@ -773,7 +766,7 @@ void ClusterSequence::_minheap_faster_tiled_N2_cluster() {
 
   // set up the initial nearest neighbour information
   vector<Tile>::const_iterator tile;
-  for (tile = _tiles.begin(); tile != _tiles.end(); tile++) {
+  for (tile = _tiles->begin(); tile != _tiles->end(); tile++) {
     // first do it on this tile
     for (jetA = tile->head; jetA != NULL; jetA = jetA->next) {
       for (jetB = tile->head; jetB != jetA; jetB = jetB->next) {
@@ -897,7 +890,7 @@ void ClusterSequence::_minheap_faster_tiled_N2_cluster() {
     // other particles.
     // Run over all tiles in our union 
     for (int itile = 0; itile < n_near_tiles; itile++) {
-      Tile * tile_ptr = &_tiles[tile_union[itile]];
+      Tile * tile_ptr = &(*_tiles)[tile_union[itile]];
       tile_ptr->tagged = false; // reset tag, since we're done with unions
       // run over all jets in the current tile
       for (TiledJet * jetI = tile_ptr->head; jetI != NULL; jetI = jetI->next) {
@@ -959,7 +952,53 @@ void ClusterSequence::_minheap_faster_tiled_N2_cluster() {
   // final cleaning up;
   delete[] briefjets;
 }
-*/
+
+
+//---------------------------------------------------start Jon
+ void ClusterSequence::s_NN_INIT( Tile * tile , ThreadManager * tman ){//one thread per tile 
+    while(1){
+      TiledJet * jetA; //needs to be made public?
+      TiledJet * jetB; //needs to be made public?
+      tman->coutFlag(" rdy: ");
+      tman->decFlag(); 
+      tman->waitTop();
+      // set up the initial nearest neighbour information
+      (tman->vm_tiles[tile->address])->lock() ;
+      // first do it on this tile
+      for (jetA = tile->head; jetA != NULL; jetA = jetA->next) {
+        for (jetB = tile->head; jetB != jetA; jetB = jetB->next) {
+          double dist = _bj_dist(jetA,jetB);
+          if (dist < jetA->NN_dist) {jetA->NN_dist = dist; jetA->NN = jetB;}
+          if (dist < jetB->NN_dist) {jetB->NN_dist = dist; jetB->NN = jetA;}
+        }
+      }
+      (tman->vm_tiles[tile->address])->unlock() ;
+      // then do it for RH tiles
+      for (Tile ** RTile = tile->RH_tiles; RTile != tile->end_tiles; RTile++) {
+        tman->grabTwoLocks( tile->address , (*RTile)->address );
+        for (jetA = tile->head; jetA != NULL; jetA = jetA->next) {
+          for (jetB = (*RTile)->head; jetB != NULL; jetB = jetB->next) {
+            double dist = _bj_dist(jetA,jetB);
+            if (dist < jetA->NN_dist) {jetA->NN_dist = dist; jetA->NN = jetB;}
+            if (dist < jetB->NN_dist) {jetB->NN_dist = dist; jetB->NN = jetA;}
+          }
+        }
+        tman->vm_tiles[tile->address]->unlock() ;
+        tman->vm_tiles[(*RTile)->address]->unlock() ;
+      }
+      tman->waitBottom();
+      tman->coutFlag(" done: ");
+    }//end while(1)
+  }
+void ClusterSequence::s_CREATE_THREADS( std::vector<Tile> * _tiles , ThreadManager * tman ){
+  for ( unsigned int i = 0; i < (*_tiles).size(); ++i ) {
+    Tile * tile = &((*_tiles)[i]);
+    tile->address = i;
+    std::mutex * _m;
+    (tman->vm_tiles).push_back( _m ) ;
+    std::thread(&fastjet::ClusterSequence::s_NN_INIT, this, tile, tman);
+  }
+}
+//---------------------------------------------------end Jon
 
 FASTJET_END_NAMESPACE
-
