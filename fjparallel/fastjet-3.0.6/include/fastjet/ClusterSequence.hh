@@ -65,7 +65,8 @@ class ClusterSequence {
 
   /// default constructor
   ClusterSequence () : _deletes_self_when_unused(false) {
-             tman->singleCore(); //**//
+               tman = new ThreadManager;
+               tman->singleCore(); //**//
              _tiles = &singlecoretiles;} //**//
 
 //   /// create a clustersequence starting from the supplied set
@@ -911,11 +912,21 @@ public :
   template<class L> ClusterSequence (
 			          const std::vector<L> & pseudojets,
 				  const JetDefinition & jet_def,
-                                  const ThreadManager & referent_thread_manager,
-				  const std::vector<Tile> & referent_tiles, //**//
+                                  ThreadManager * referent_thread_manager,
+				  std::vector<Tile> * referent_tiles,
 				  const bool & writeout_combinations = false){
-             tman = &referent_thread_manager;
-              _tiles = &referent_tiles;}
+               tman = referent_thread_manager;
+             _tiles = referent_tiles;
+
+             // transfer the initial jets (type L) into our own array
+             _transfer_input_jets(pseudojets);
+
+             // transfer the remaining options
+             _decant_options_partial();
+
+             // run the clustering
+             _initialise_and_run_no_decant();
+}
 
   class ThreadManager{ //all objects are private, have public get methods
  
@@ -1092,8 +1103,8 @@ template<class L> ClusterSequence::ClusterSequence (
   _jet_def(jet_def_in), _writeout_combinations(writeout_combinations),
   _structure_shared_ptr(new ClusterSequenceStructure(this))
 {
-
-             tman->singleCore();
+               tman = new ThreadManager;
+               tman->singleCore();
              _tiles = &singlecoretiles;
   // transfer the initial jets (type L) into our own array
   _transfer_input_jets(pseudojets);
